@@ -8,7 +8,7 @@ from scraper import scrape_images  # This is your async scraping function
 
 # Define allowed origins (React/Vite frontend)
 origins = [
-    "http://localhost:5173",
+    "https://hackthehaze.vercel.app/",
 ]
 
 # Create FastAPI app
