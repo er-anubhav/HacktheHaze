@@ -18,7 +18,7 @@ function App() {
     setErrors([]);
 
     try {
-      const response = await axios.post('http://localhost:8000/scrape', { urls: urlArray });
+      const response = await axios.post('https://hackthehaze.onrender.com/scrape', { urls: urlArray });
       const data = response.data;
       setResults(data.results || {});
       setErrors(data.errors || []);
