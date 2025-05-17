@@ -4,9 +4,11 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup, Tag
 
+from config import settings
+
 async def scrape_images(url: str) -> List[str]:
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=settings.REQUEST_TIMEOUT) as client:
             response = await client.get(url)
             response.raise_for_status()
             html = response.text

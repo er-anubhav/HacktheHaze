@@ -1,14 +1,17 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Query, Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 import asyncio
-from typing import List, Dict
-import validators
 import traceback
+import validators
+from typing import Optional, List
 
 from config import settings
-from scraper import scrape_images  # This is your async scraping function
+from models import ScrapeRequest, ScrapeResponse, HealthResponse, HistoryResponse, User
+from scraper import scrape_images
+from auth import get_current_user, get_optional_user
+from database import save_scrape_history, get_user_history
+from cache import cached, clear_cache
 
 # Create FastAPI app
 app = FastAPI(
@@ -30,21 +33,18 @@ app.add_middleware(
     max_age=86400  # Cache preflight requests for 24 hours
 )
 
-# Models
-class ScrapeRequest(BaseModel):
-    urls: List[str]
-
-class ScrapeResponse(BaseModel):
-    results: Dict[str, List[str]]
-    errors: List[Dict[str, str]]
-
-class HealthResponse(BaseModel):
-    status: str
-    version: str
-
 # Main POST endpoint
 @app.post("/scrape", response_model=ScrapeResponse, tags=["Scraping"])
-async def scrape_urls(request: ScrapeRequest) -> ScrapeResponse:
+@cached(expires_in_seconds=settings.CACHE_EXPIRY)
+async def scrape_urls(
+    request: ScrapeRequest,
+    current_user: Optional[User] = Depends(get_optional_user)
+) -> ScrapeResponse:
+    """
+    Scrape images from URLs.
+    
+    Authenticated users will have their scrape history saved.
+    """
     results = {}
     errors = []
     
@@ -80,7 +80,53 @@ async def scrape_urls(request: ScrapeRequest) -> ScrapeResponse:
     except Exception as e:
         errors.append({"url": "general", "error": f"Unexpected error: {str(e)}"})
 
+    # Save history for authenticated users
+    if current_user and results:
+        total_images = sum(len(images) for images in results.values())
+        try:
+            await save_scrape_history(
+                user_id=current_user.id,
+                urls=request.urls,
+                image_count=total_images
+            )
+        except Exception as e:
+            if settings.DEBUG:
+                print(f"Failed to save history: {str(e)}")
+
     return ScrapeResponse(results=results, errors=errors)
+
+# History endpoint (requires authentication)
+@app.get("/history", response_model=HistoryResponse, tags=["History"])
+async def get_history(
+    current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1, description="Page number, starting from 1"),
+    page_size: int = Query(
+        settings.DEFAULT_PAGE_SIZE,
+        ge=1,
+        le=settings.MAX_PAGE_SIZE,
+        description="Number of items per page"
+    )
+):
+    """
+    Get user's scrape history (authenticated users only).
+    """
+    return await get_user_history(
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size
+    )
+
+# History detail endpoint
+@app.get("/history/{history_id}", tags=["History"])
+async def get_history_detail(
+    history_id: int = Path(..., description="History entry ID"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get a specific history entry (authenticated users only).
+    """
+    # Implementation would fetch a specific history entry
+    raise HTTPException(status_code=501, detail="Not implemented yet")
 
 # Root endpoint
 @app.get("/", tags=["Root"])
@@ -94,7 +140,16 @@ async def root():
 # Health check endpoint
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health():
-    return HealthResponse(status="ok", version="1.0.0")
+    return HealthResponse(status="ok", version=settings.API_VERSION)
+
+# Clear cache endpoint (admin only - would need additional auth in production)
+@app.post("/admin/clear-cache", tags=["Admin"])
+async def admin_clear_cache():
+    """Clear the API cache (admin only)."""
+    if settings.DEBUG:
+        clear_cache()
+        return {"status": "Cache cleared"}
+    raise HTTPException(status_code=403, detail="Not allowed in production")
 
 # Run the app (for standalone testing)
 if __name__ == "__main__":

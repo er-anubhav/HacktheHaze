@@ -1,17 +1,35 @@
 import { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 
+// Components
 import URLInput from './components/URLInput';
 import ImageGrid from './components/ImageGrid';
 import ErrorList from './components/ErrorList';
+import Navbar from './components/Nav/Navbar';
+import Login from './components/Auth/Login';
+import SignUp from './components/Auth/SignUp';
+import History from './components/History/History';
 
-function App() {
+// Context
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+// Supabase
+import { saveHistory } from './lib/supabase';
+
+function HomePage() {
   const [urls, setUrls] = useState([]);
   const [results, setResults] = useState({});
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
   async function handleSubmit(urlArray) {
+    if (!user) {
+      // Redirect to login if not authenticated
+      return;
+    }
+    
     setUrls(urlArray);
     setLoading(true);
     setResults({});
@@ -22,6 +40,15 @@ function App() {
       const data = response.data;
       setResults(data.results || {});
       setErrors(data.errors || []);
+      
+      // Save to history if results found
+      if (data.results && Object.keys(data.results).length > 0) {
+        const totalImages = Object.values(data.results).reduce(
+          (sum, images) => sum + images.length, 0
+        );
+        
+        await saveHistory(user.id, urlArray, totalImages);
+      }
     } catch (error) {
       setErrors([{ url: 'General', error: error.message }]);
     } finally {
@@ -41,9 +68,32 @@ function App() {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-12 transition-all hover:shadow-2xl">
-          <URLInput onSubmit={handleSubmit} />
-        </div>
+        {!user ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 text-center">
+            <h2 className="text-xl font-bold mb-4">Sign in to continue</h2>
+            <p className="mb-6 text-gray-600 dark:text-gray-300">
+              You need to sign in to use the image scraper and save your history.
+            </p>
+            <div className="flex justify-center space-x-4">
+              <a 
+                href="/login" 
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                Sign In
+              </a>
+              <a 
+                href="/signup" 
+                className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+              >
+                Sign Up
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-12 transition-all hover:shadow-2xl">
+            <URLInput onSubmit={handleSubmit} />
+          </div>
+        )}
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-12">
@@ -65,6 +115,52 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+// Protected route component
+function ProtectedRoute({ children }) {
+  const { user, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>
+      </div>
+    );
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+  
+  return children;
+}
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <div className="min-h-screen flex flex-col">
+          <Navbar />
+          <main className="flex-grow">
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route 
+                path="/history" 
+                element={
+                  <ProtectedRoute>
+                    <History />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/" element={<HomePage />} />
+            </Routes>
+          </main>
+        </div>
+      </AuthProvider>
+    </Router>
   );
 }
 

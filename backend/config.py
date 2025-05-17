@@ -1,6 +1,6 @@
 """Configuration settings for the HackTheHaze backend."""
 import os
-from typing import List
+from typing import List, Optional
 
 
 class Settings:
@@ -35,6 +35,22 @@ class Settings:
     # Environment
     ENV: str = os.getenv("ENV", "development")
     DEBUG: bool = ENV == "development"
+    
+    # Database
+    DB_URL: str = os.getenv("DATABASE_URL", "")
+    
+    # Supabase authentication
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
+    
+    # Cache settings
+    CACHE_ENABLED: bool = True
+    CACHE_EXPIRY: int = 60 * 60 * 24  # 24 hours in seconds
+    
+    # Pagination
+    DEFAULT_PAGE_SIZE: int = 20
+    MAX_PAGE_SIZE: int = 100
 
 
 settings = Settings()
