@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Column, Integer, String, DateTime, Text, select, insert
 
 from config import settings
-from models import HistoryEntry
+from models import HistoryEntry, HistoryResponse
 
 
 # Initialize Supabase client for direct database access
@@ -112,10 +112,10 @@ async def get_user_history(
         
         items = [HistoryEntry(**item) for item in response.json()]
         
-        return {
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "pages": total_pages
-        }
+        return HistoryResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=total_pages
+        )
