@@ -10,14 +10,16 @@ class Settings:
     API_TITLE: str = "HackTheHaze Image Scraper API"
     API_VERSION: str = "1.0.0"
     API_DESCRIPTION: str = "API for scraping images from websites"
-    
-    # CORS Settings
+      # CORS Settings
     CORS_ORIGINS: List[str] = [
         "https://hackthehaze.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://hackthehaze.netlify.app",
+        "https://hackthehaze.onrender.com",
+        "*"  # For development - remove in production
     ]
-    CORS_ORIGIN_REGEX: str = r"https://.*\.vercel\.app"
+    CORS_ORIGIN_REGEX: str = r"https://.*\.(vercel\.app|netlify\.app|onrender\.com)"
     
     # Outbound Static IP Addresses (for whitelisting)
     OUTBOUND_IPS: List[str] = [

@@ -10,12 +10,13 @@ import Navbar from './components/Nav/Navbar';
 import Login from './components/Auth/Login';
 import SignUp from './components/Auth/SignUp';
 import History from './components/History/History';
+import AuthDebugger from './components/Debug/AuthDebugger';
 
 // Context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Supabase
-import { saveHistory } from './lib/supabase';
+import { saveHistory, supabase } from './lib/supabase';
 
 function HomePage() {
   const [urls, setUrls] = useState([]);
@@ -36,7 +37,22 @@ function HomePage() {
     setErrors([]);
 
     try {
-      const response = await axios.post('https://hackthehaze.onrender.com/scrape', { urls: urlArray });
+      // Get current session to retrieve token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      // Include token in Authorization header
+      const response = await axios.post(
+        'https://hackthehaze.onrender.com/scrape', 
+        { urls: urlArray },
+        { 
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
       const data = response.data;
       setResults(data.results || {});
       setErrors(data.errors || []);
@@ -50,6 +66,7 @@ function HomePage() {
         await saveHistory(user.id, urlArray, totalImages);
       }
     } catch (error) {
+      console.error("API Error:", error.response?.status, error.response?.data || error.message);
       setErrors([{ url: 'General', error: error.message }]);
     } finally {
       setLoading(false);
@@ -155,6 +172,7 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
+              <Route path="/debug" element={<AuthDebugger />} />
               <Route path="/" element={<HomePage />} />
             </Routes>
           </main>

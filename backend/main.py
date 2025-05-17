@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, Path
+from fastapi import FastAPI, HTTPException, Depends, Query, Path, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import asyncio
 import traceback
 import validators
 from typing import Optional, List
+import logging
 
 from config import settings
 from models import ScrapeRequest, ScrapeResponse, HealthResponse, HistoryResponse, User
@@ -12,6 +13,10 @@ from scraper import scrape_images
 from auth import get_current_user, get_optional_user
 from database import save_scrape_history, get_user_history
 from cache import cached, clear_cache
+
+# Configure logging
+logging.basicConfig(level=logging.INFO if settings.DEBUG else logging.WARNING)
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -22,7 +27,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 
-# Enable CORS
+# Enable CORS - Support all headers including Authorization
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -32,6 +37,22 @@ app.add_middleware(
     allow_headers=["*"],
     max_age=86400  # Cache preflight requests for 24 hours
 )
+
+# Custom middleware to log requests
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    path = request.url.path
+    method = request.method
+    client = request.client.host if request.client else "unknown"
+    auth_header = request.headers.get("Authorization", "No Auth")
+    auth_present = "Auth header present" if auth_header != "No Auth" else "No Auth header"
+    
+    logger.info(f"Request: {method} {path} from {client} - {auth_present}")
+    
+    response = await call_next(request)
+    
+    logger.info(f"Response: {method} {path} - Status: {response.status_code}")
+    return response
 
 # Main POST endpoint
 @app.post("/scrape", response_model=ScrapeResponse, tags=["Scraping"])
@@ -45,6 +66,10 @@ async def scrape_urls(
     
     Authenticated users will have their scrape history saved.
     """
+    # Debug logging
+    logger.info(f"Processing scrape request for URLs: {request.urls}")
+    logger.info(f"Current user: {current_user}")
+    
     results = {}
     errors = []
     
@@ -84,12 +109,14 @@ async def scrape_urls(
     if current_user and results:
         total_images = sum(len(images) for images in results.values())
         try:
+            logger.info(f"Saving history for user {current_user.id}")
             await save_scrape_history(
                 user_id=current_user.id,
                 urls=request.urls,
                 image_count=total_images
             )
         except Exception as e:
+            logger.error(f"Failed to save history: {str(e)}")
             if settings.DEBUG:
                 print(f"Failed to save history: {str(e)}")
 
@@ -141,6 +168,22 @@ async def root():
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health():
     return HealthResponse(status="ok", version=settings.API_VERSION)
+
+# DEBUG endpoint to check authentication
+@app.get("/auth-check", tags=["Debug"])
+async def auth_check(current_user: Optional[User] = Depends(get_optional_user)):
+    """Debug endpoint to check authentication status."""
+    if current_user:
+        return {
+            "authenticated": True,
+            "user_id": current_user.id,
+            "email": current_user.email
+        }
+    else:
+        return {
+            "authenticated": False,
+            "message": "No valid authentication token found"
+        }
 
 # Clear cache endpoint (admin only - would need additional auth in production)
 @app.post("/admin/clear-cache", tags=["Admin"])

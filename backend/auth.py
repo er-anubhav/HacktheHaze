@@ -1,13 +1,30 @@
 """Authentication and authorization utilities."""
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, HTTPBearer as HTTPBearerBase
 from jose import jwt, JWTError
+from typing import Optional
 
 from config import settings
 from models import User
 
-# Setup HTTP Bearer auth scheme
+# Create a custom HTTPBearer that doesn't raise an exception for missing auth
+class OptionalHTTPBearer(HTTPBearerBase):
+    async def __call__(self, request: Request) -> Optional[HTTPAuthorizationCredentials]:
+        authorization = request.headers.get("Authorization")
+        
+        if not authorization:
+            return None
+            
+        scheme, credentials = authorization.split()
+        if scheme.lower() != "bearer":
+            return None
+            
+        return HTTPAuthorizationCredentials(scheme=scheme, credentials=credentials)
+
+
+# Setup auth schemes
 security = HTTPBearer()
+optional_security = OptionalHTTPBearer()
 
 
 async def get_current_user(
@@ -29,7 +46,6 @@ async def get_current_user(
         token = credentials.credentials
         
         # Decode and verify JWT token
-        # Note: In production, we would use the Supabase JWT secret for verification
         payload = jwt.decode(
             token,
             settings.SUPABASE_JWT_SECRET,
@@ -58,8 +74,8 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> User:
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)
+) -> Optional[User]:
     """
     Attempt to get current user, but don't require authentication.
     
@@ -69,7 +85,26 @@ async def get_optional_user(
     Returns:
         User or None: The authenticated user or None if not authenticated.
     """
+    if not credentials:
+        return None
+        
     try:
-        return await get_current_user(credentials)
-    except HTTPException:
+        token = credentials.credentials
+        
+        # Decode and verify JWT token
+        payload = jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            options={"verify_aud": False}
+        )
+        
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        
+        if user_id is None or email is None:
+            return None
+        
+        return User(id=user_id, email=email)
+    except (JWTError, Exception):
         return None
