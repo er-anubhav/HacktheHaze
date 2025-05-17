@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { getUserHistory } from '../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { getUserHistory } from '../../lib/supabase';
 import { ExternalLink, Calendar, Image } from 'lucide-react';
 
 export default function History() {
