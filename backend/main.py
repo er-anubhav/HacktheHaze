@@ -18,8 +18,8 @@ app = FastAPI(
     title=settings.API_TITLE,
     description=settings.API_DESCRIPTION,
     version=settings.API_VERSION,
-    docs_url="/docs" if settings.DEBUG else None,  # Hide docs in production
-    redoc_url="/redoc" if settings.DEBUG else None  # Hide redoc in production
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
 
 # Enable CORS
